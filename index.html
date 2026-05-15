@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online EQ Traning Tools - 13段自定义均衡器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.tailwindcss.com" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 配置Tailwind自定义颜色和字体 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#8B5CF6',
+                        dark: '#1E293B',
+                        light: '#F8FAFC'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .slider-vertical {
+                writing-mode: bt-lr;
+                -webkit-appearance: slider-vertical;
+            }
+            .visualizer-container {
+                height: 120px;
+                position: relative;
+                overflow: hidden;
+            }
+            .progress-container {
+                height: 6px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            .progress-container:hover {
+                height: 8px;
+            }
+            .progress-handle {
+                position: absolute;
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background-color: #3B82F6;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                box-shadow: 0 0 3px rgba(0,0,0,0.3);
+                opacity: 0;
+                transition: opacity 0.2s ease;
+            }
+            .progress-container:hover .progress-handle {
+                opacity: 1;
+            }
+            .eq-band {
+                flex: 1;
+                min-width: 60px;
+            }
+            .creator-signature {
+                font-style: italic;
+                letter-spacing: 0.5px;
+            }
+            /* 提示框样式 */
+            .tooltip {
+                position: relative;
+            }
+            .tooltip .tooltip-text {
+                visibility: hidden;
+                width: 120px;
+                background-color: #333;
+                color: #fff;
+                text-align: center;
+                border-radius: 4px;
+                padding: 5px;
+                position: absolute;
+                z-index: 1;
+                bottom: 125%;
+                left: 50%;
+                transform: translateX(-50%);
+                opacity: 0;
+                transition: opacity 0.3s;
+                font-size: 12px;
+                pointer-events: none;
+            }
+            .tooltip .tooltip-text::after {
+                content: "";
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                margin-left: -5px;
+                border-width: 5px;
+                border-style: solid;
+                border-color: #333 transparent transparent transparent;
+            }
+            .tooltip:hover .tooltip-text {
+                visibility: visible;
+                opacity: 1;
+            }
+            .q-control {
+                width: 100%;
+                margin-top: 8px;
+            }
+            .freq-control {
+                width: 100%;
+                margin-top: 8px;
+            }
+            .custom-freq-indicator {
+                position: relative;
+            }
+            .custom-freq-indicator::after {
+                content: "✦";
+                color: '#8B5CF6';
+                font-size: 8px;
+                position: absolute;
+                top: -8px;
+                right: -5px;
+            }
+            .custom-group-label {
+                position: relative;
+                margin-top: 15px;
+                font-weight: bold;
+                color: '#8B5CF6';
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-dark">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <header class="text-center mb-10">
+            <h1 class="text-[clamp(2rem,5vw,3rem)] font-bold text-primary mb-2">Online EQ Traning Tools</h1>
+            <p class="text-gray-600 text-lg">13段自定义均衡器 - 最后三个为全范围可调频点</p>
+        </header>
+        
+        <main class="bg-white rounded-xl shadow-lg p-6 md:p-8">
+            <!-- 文件上传区域 -->
+            <div class="mb-8 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
+                <label for="audio-upload" class="cursor-pointer">
+                    <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-3"></i>
+                    <p class="text-gray-700 mb-2">点击或拖放音乐文件到此处</p>
+                    <p class="text-sm text-gray-500">支持 MP3, WAV, OGG 等格式</p>
+                    <input type="file" id="audio-upload" accept="audio/*" class="hidden">
+                </label>
+                <div id="file-info" class="mt-4 hidden">
+                    <div class="flex items-center justify-center gap-3">
+                        <i class="fa fa-music text-primary"></i>
+                        <span id="file-name" class="font-medium truncate max-w-md"></span>
+                        <button id="remove-file" class="text-gray-400 hover:text-red-500">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 播放控制区域 -->
+            <div class="flex flex-wrap justify-between items-center mb-8 gap-4">
+                <div class="flex items-center gap-4">
+                    <button id="play-btn" class="bg-primary hover:bg-primary/90 text-white w-12 h-12 rounded-full flex items-center justify-center transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled="">
+                        <i class="fa fa-play text-xl"></i>
+                    </button>
+                    <div>
+                        <div id="track-info" class="font-medium">未选择文件</div>
+                        <div class="flex items-center text-sm text-gray-500 gap-2">
+                            <span id="current-time">00:00</span>
+                            <span>/</span>
+                            <span id="total-time">00:00</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <label for="volume" class="text-gray-700 font-medium">总音量:</label>
+                    <input type="range" id="volume" min="0" max="1" step="0.01" value="0.7" class="w-40 accent-primary">
+                    <span id="volume-value" class="text-gray-600 w-10 text-center">70%</span>
+                </div>
+            </div>
+            
+            <!-- 进度条 -->
+            <div class="mb-8 relative">
+                <div id="progress-container" class="progress-container bg-gray-200 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="bg-primary h-full w-0 transition-all"></div>
+                    <div id="progress-handle" class="progress-handle"></div>
+                </div>
+            </div>
+            
+            <!-- 13段均衡器区域 -->
+            <div class="mb-10">
+                <h2 class="text-xl font-semibold mb-6 text-center">13段均衡器 (✦ 标记为可自定义频点，20-20000Hz全范围可调)</h2>
+                <div class="flex justify-between items-end gap-1 md:gap-3 overflow-x-auto pb-4 px-1">
+                    <div id="eq-container" class="flex justify-between items-end w-full">
+                        <!-- 固定频点和自定义频点将通过JS动态生成 -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 预设效果 -->
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold mb-4 text-center">音效预设</h2>
+                <div class="flex flex-wrap justify-center gap-3">
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="flat">平直</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="bass">低音增强</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="treble">高音增强</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="vocal">人声增强</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="classical">古典音乐</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="rock">摇滚</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="jazz">爵士</button>
+                    <!-- 带悬停提示的存储按钮 -->
+                    <div class="tooltip">
+                        <button class="preset-btn bg-amber-100 hover:bg-amber-200 py-2 px-4 rounded-md transition-colors" data-slot="1">
+                            <i class="fa fa-save mr-1"></i>存储1
+                        </button>
+                        <span class="tooltip-text">单击加载，双击保存</span>
+                    </div>
+                    <div class="tooltip">
+                        <button class="preset-btn bg-amber-100 hover:bg-amber-200 py-2 px-4 rounded-md transition-colors" data-slot="2">
+                            <i class="fa fa-save mr-1"></i>存储2
+                        </button>
+                        <span class="tooltip-text">单击加载，双击保存</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 音频可视化区域 -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-4 text-center">音频频谱</h2>
+                <div class="visualizer-container bg-gray-100 rounded-lg border border-gray-200">
+                    <canvas id="visualizer" class="w-full h-full"></canvas>
+                </div>
+            </div>
+            
+            <!-- 状态信息 -->
+            <div class="text-center text-gray-600 text-sm">
+                <p id="status" class="py-2">请上传本地音乐文件开始使用</p>
+            </div>
+        </main>
+        
+        <footer class="mt-10 text-center text-gray-500 text-sm">
+            <p>基于Web Audio API构建 | 13段均衡器精确调节音频频率</p>
+            <p class="mt-2 creator-signature text-primary">Created by Alex     Ver 1.2</p>
+        </footer>
+    </div>
+
+    <script>
+        // 13段均衡器频率设置 (Hz)
+        // 前10个为固定频点，最后3个为可自定义频点
+        const EQ_FREQUENCIES = [
+            31, 62, 125, 250, 500, 
+            1000, 2000, 4000, 8000, 16000,
+            500, 3000, 10000  // 最后三个为可自定义频点，初始值分别设置为低频、中频和高频
+        ];
+        
+        // 标记哪些是可自定义的频点（最后三个）
+        const CUSTOM_FREQ_INDICES = [10, 11, 12];
+        
+        // 默认Q值
+        const DEFAULT_Q_VALUE = 1.2;
+        
+        // 全局变量
+        let audioContext = null;
+        let audioElement = null;
+        let analyserNode = null;
+        let gainNode = null;
+        let eqFilters = [];
+        let isPlaying = false;
+        let audioDuration = 0;
+        let updateProgressInterval = null;
+        let isDragging = false;
+        // 存储预设的变量
+        let savedPresets = {
+            1: null,
+            2: null
+        };
+        
+        // DOM元素引用
+        const audioUpload = document.getElementById('audio-upload');
+        const fileInfo = document.getElementById('file-info');
+        const fileName = document.getElementById('file-name');
+        const removeFile = document.getElementById('remove-file');
+        const playBtn = document.getElementById('play-btn');
+        const trackInfo = document.getElementById('track-info');
+        const currentTimeDisplay = document.getElementById('current-time');
+        const totalTimeDisplay = document.getElementById('total-time');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+        const progressHandle = document.getElementById('progress-handle');
+        const volumeControl = document.getElementById('volume');
+        const volumeValue = document.getElementById('volume-value');
+        const eqContainer = document.getElementById('eq-container');
+        const statusDisplay = document.getElementById('status');
+        const visualizerCanvas = document.getElementById('visualizer');
+        const visualizerCtx = visualizerCanvas.getContext('2d');
+        const presetButtons = document.querySelectorAll('.preset-btn');
+        
+        // 存储EQ控件引用
+        let eqControls = [];
+        let eqValueDisplays = [];
+        // Q值控件引用
+        let qControls = [];
+        let qValueDisplays = [];
+        // 频率控件引用（仅针对可自定义频点）
+        let freqControls = [];
+        let freqValueDisplays = [];
+        
+        // 预设配置 - 包含13段的增益和Q值
+        const presets = {
+            flat: {
+                gains: Array(13).fill(0),
+                qValues: Array(13).fill(DEFAULT_Q_VALUE),
+                frequencies: [...EQ_FREQUENCIES]
+            },
+            bass: {
+                gains: [12, 10, 8, 6, 4, -2, -4, -6, -6, -4, 8, -2, -4],
+                qValues: [1.8, 1.6, 1.4, 1.2, 1.0, 0.8, 0.8, 0.8, 0.8, 0.8, 1.5, 1.0, 0.8],
+                frequencies: [...EQ_FREQUENCIES]
+            },
+            treble: {
+                gains: [-4, -4, -6, -6, -4, -2, 2, 6, 10, 12, -4, 8, 10],
+                qValues: [0.8, 0.8, 0.8, 0.8, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 0.8, 1.5, 1.8],
+                frequencies: [...EQ_FREQUENCIES]
+            },
+            vocal: {
+                gains: [-6, -6, -4, -2, 0, 6, 4, -2, -2, -4, -2, 6, -2],
+                qValues: [1.0, 1.0, 1.0, 1.0, 1.2, 2.0, 1.5, 1.0, 1.0, 1.0, 1.0, 2.0, 1.0],
+                frequencies: [...EQ_FREQUENCIES]
+            },
+            classical: {
+                gains: [4, 4, 2, 0, 0, 0, 0, 2, 4, 4, 2, 0, 2],
+                qValues: [1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2],
+                frequencies: [...EQ_FREQUENCIES]
+            },
+            rock: {
+                gains: [8, 8, 6, 4, -2, 2, 6, 8, 8, 6, 6, 4, 2],
+                qValues: [1.5, 1.5, 1.5, 1.2, 1.0, 1.0, 1.2, 1.5, 1.5, 1.5, 1.5, 1.2, 1.0],
+                frequencies: [...EQ_FREQUENCIES]
+            },
+            jazz: {
+                gains: [2, 4, 6, 6, 4, 2, 0, 2, 4, 6, 4, 0, 2],
+                qValues: [1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2],
+                frequencies: [...EQ_FREQUENCIES]
+            }
+        };
+        
+        // 初始化13段均衡器UI - 最后三个为可自定义频点
+        function initEqualizerUI() {
+            eqContainer.innerHTML = '';
+            eqControls = [];
+            eqValueDisplays = [];
+            qControls = [];
+            qValueDisplays = [];
+            freqControls = [];
+            freqValueDisplays = [];
+            
+            // 添加固定频点和自定义频点的分隔标签
+            let separatorAdded = false;
+            
+            EQ_FREQUENCIES.forEach((freq, index) => {
+                const isCustomFreq = CUSTOM_FREQ_INDICES.includes(index);
+                
+                // 在固定频点和自定义频点之间添加分隔标签
+                if (isCustomFreq && !separatorAdded) {
+                    const separator = document.createElement('div');
+                    separator.className = 'flex flex-col items-center justify-end mx-2';
+                    separator.innerHTML = '<div class="custom-group-label">自定义频点</div>';
+                    eqContainer.appendChild(separator);
+                    separatorAdded = true;
+                }
+                
+                const eqBand = document.createElement('div');
+                eqBand.className = 'eq-band flex flex-col items-center';
+                
+                const sliderContainer = document.createElement('div');
+                sliderContainer.className = 'h-60 w-10 flex items-end justify-center mb-2';
+                
+                const slider = document.createElement('input');
+                slider.type = 'range';
+                slider.min = -24;
+                slider.max = 24;
+                slider.step = 0.5;
+                slider.value = 0;
+                slider.className = 'slider-vertical h-full w-6 accent-primary';
+                slider.id = `eq-${index}`;
+                
+                eqControls.push(slider);
+                
+                const valueDisplay = document.createElement('p');
+                valueDisplay.className = 'text-primary font-medium text-sm mt-1';
+                valueDisplay.id = `eq-${index}-value`;
+                valueDisplay.textContent = '0 dB';
+                eqValueDisplays.push(valueDisplay);
+                
+                // 频率控制滑块（仅针对可自定义频点）
+                let freqSliderContainer, freqSlider, freqValueDisplay;
+                if (isCustomFreq) {
+                    freqSliderContainer = document.createElement('div');
+                    freqSliderContainer.className = 'w-full px-1';
+                    
+                    // 全范围可调：20-20000Hz
+                    freqSlider = document.createElement('input');
+                    freqSlider.type = 'range';
+                    freqSlider.min = 20;
+                    freqSlider.max = 20000;
+                    freqSlider.step = 10;
+                    freqSlider.value = freq;
+                    freqSlider.className = 'freq-control accent-accent';
+                    freqSlider.id = `freq-${index}`;
+                    
+                    freqControls.push({index, element: freqSlider});
+                    
+                    freqValueDisplay = document.createElement('p');
+                    freqValueDisplay.className = 'text-accent font-medium text-xs mt-1 custom-freq-indicator';
+                    freqValueDisplay.id = `freq-${index}-value`;
+                    freqValueDisplay.textContent = `${freq} Hz`;
+                    freqValueDisplays.push({index, element: freqValueDisplay});
+                }
+                
+                // Q值控制滑块
+                const qSliderContainer = document.createElement('div');
+                qSliderContainer.className = 'w-full px-1';
+                
+                const qSlider = document.createElement('input');
+                qSlider.type = 'range';
+                qSlider.min = 0.1;
+                qSlider.max = 5;
+                qSlider.step = 0.1;
+                qSlider.value = DEFAULT_Q_VALUE;
+                qSlider.className = 'q-control accent-secondary';
+                qSlider.id = `q-${index}`;
+                
+                qControls.push(qSlider);
+                
+                const qValueDisplay = document.createElement('p');
+                qValueDisplay.className = 'text-secondary font-medium text-xs mt-1';
+                qValueDisplay.id = `q-${index}-value`;
+                qValueDisplay.textContent = `Q: ${DEFAULT_Q_VALUE.toFixed(1)}`;
+                qValueDisplays.push(qValueDisplay);
+                
+                // 频率标签
+                const freqLabel = document.createElement('p');
+                freqLabel.className = `font-medium text-xs mt-2 ${isCustomFreq ? 'text-accent' : 'text-gray-600'}`;
+                freqLabel.textContent = `${freq} Hz`;
+                
+                // 组装EQ段
+                sliderContainer.appendChild(slider);
+                eqBand.appendChild(sliderContainer);
+                eqBand.appendChild(valueDisplay);
+                
+                if (isCustomFreq) {
+                    eqBand.appendChild(freqSliderContainer);
+                    freqSliderContainer.appendChild(freqSlider);
+                    eqBand.appendChild(freqValueDisplay);
+                }
+                
+                eqBand.appendChild(qSliderContainer);
+                qSliderContainer.appendChild(qSlider);
+                eqBand.appendChild(qValueDisplay);
+                eqBand.appendChild(freqLabel);
+                
+                eqContainer.appendChild(eqBand);
+                
+                // 添加事件监听器
+                slider.addEventListener('input', (e) => {
+                    const gain = parseFloat(e.target.value);
+                    valueDisplay.textContent = `${gain} dB`;
+                    if (eqFilters[index]) {
+                        // 注意：Web Audio API的BiquadFilterNode.gain期望的是分贝值，不是线性值
+                        eqFilters[index].gain.value = gain;
+                    }
+                });
+                
+                qSlider.addEventListener('input', (e) => {
+                    const qValue = parseFloat(e.target.value);
+                    qValueDisplay.textContent = `Q: ${qValue.toFixed(1)}`;
+                    if (eqFilters[index]) {
+                        eqFilters[index].Q.value = qValue;
+                    }
+                });
+                
+                // 为自定义频点添加频率滑块事件
+                if (isCustomFreq) {
+                    freqSlider.addEventListener('input', (e) => {
+                        const newFreq = parseInt(e.target.value);
+                        freqValueDisplay.textContent = `${newFreq} Hz`;
+                        freqLabel.textContent = `${newFreq} Hz`;
+                        if (eqFilters[index]) {
+                            eqFilters[index].frequency.value = newFreq;
+                            // 更新频率数组
+                            EQ_FREQUENCIES[index] = newFreq;
+                        }
+                    });
+                }
+            });
+        }
+        
+        // 初始化音频处理
+        function initAudioProcessing() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyserNode = audioContext.createAnalyser();
+                analyserNode.fftSize = 2048;
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = volumeControl.value;
+                
+                // 创建13个EQ滤波器
+                eqFilters = [];
+                EQ_FREQUENCIES.forEach((freq, index) => {
+                    const filter = audioContext.createBiquadFilter();
+                    filter.type = 'peaking';
+                    filter.frequency.value = freq;
+                    filter.Q.value = DEFAULT_Q_VALUE;
+                    filter.gain.value = 0; // 初始为0dB
+                    eqFilters.push(filter);
+                });
+                
+                // 连接音频节点
+                // 源 -> EQ滤波器链 -> 分析器 -> 增益 -> 输出
+                for (let i = 0; i < eqFilters.length; i++) {
+                    if (i === 0) {
+                        // 第一个滤波器连接到源（稍后设置）
+                    } else {
+                        eqFilters[i-1].connect(eqFilters[i]);
+                    }
+                }
+                
+                // 最后一个滤波器连接到分析器
+                eqFilters[eqFilters.length - 1].connect(analyserNode);
+                analyserNode.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+            } else if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+        
+        // 加载音频文件
+        function loadAudioFile(file) {
+            if (audioElement) {
+                audioElement.pause();
+                audioElement = null;
+            }
+            
+            const fileURL = URL.createObjectURL(file);
+            audioElement = new Audio(fileURL);
+            
+            initAudioProcessing();
+            
+            // 创建媒体元素源并连接到第一个EQ滤波器
+            const source = audioContext.createMediaElementSource(audioElement);
+            source.connect(eqFilters[0]);
+            
+            // 更新UI
+            fileName.textContent = file.name;
+            fileInfo.classList.remove('hidden');
+            trackInfo.textContent = file.name;
+            playBtn.disabled = false;
+            statusDisplay.textContent = '音频加载完成，点击播放按钮开始';
+            
+            // 监听音频元数据加载完成
+            audioElement.addEventListener('loadedmetadata', () => {
+                audioDuration = audioElement.duration;
+                totalTimeDisplay.textContent = formatTime(audioDuration);
+            });
+            
+            // 监听播放结束
+            audioElement.addEventListener('ended', () => {
+                stopPlayback();
+                statusDisplay.textContent = '播放已结束';
+            });
+            
+            // 开始可视化
+            startVisualization();
+        }
+        
+        // 开始播放
+        function startPlayback() {
+            if (!audioElement) return;
+            
+            initAudioProcessing(); // 确保音频上下文已初始化
+            
+            audioElement.play()
+                .then(() => {
+                    isPlaying = true;
+                    playBtn.innerHTML = '<i class="fa fa-pause text-xl"></i>';
+                    statusDisplay.textContent = '正在播放...';
+                    
+                    // 启动进度更新
+                    updateProgressInterval = setInterval(updateProgress, 100);
+                    
+                    // 重新开始可视化
+                    if (animationFrameId) {
+                        cancelAnimationFrame(animationFrameId);
+                    }
+                    startVisualization();
+                })
+                .catch(error => {
+                    console.error('播放失败:', error);
+                    statusDisplay.textContent = '播放失败，请尝试再次上传文件';
+                });
+        }
+        
+        // 停止播放
+        function stopPlayback() {
+            if (!audioElement) return;
+            
+            audioElement.pause();
+            isPlaying = false;
+            playBtn.innerHTML = '<i class="fa fa-play text-xl"></i>';
+            
+            // 清除进度更新
+            if (updateProgressInterval) {
+                clearInterval(updateProgressInterval);
+                updateProgressInterval = null;
+            }
+            
+            // 停止可视化动画
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            // 清空频谱显示
+            visualizerCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+        }
+        
+        // 切换播放/暂停
+        function togglePlayback() {
+            if (isPlaying) {
+                stopPlayback();
+            } else {
+                startPlayback();
+            }
+        }
+        
+        // 更新进度条
+        function updateProgress() {
+            if (!audioElement || isDragging) return;
+            
+            const currentTime = audioElement.currentTime;
+            const progress = (currentTime / audioDuration) * 100;
+            
+            progressBar.style.width = `${progress}%`;
+            progressHandle.style.left = `${progress}%`;
+            currentTimeDisplay.textContent = formatTime(currentTime);
+        }
+        
+        // 设置播放位置
+        function setPlaybackPosition(position) {
+            if (!audioElement) return;
+            
+            const seekTime = (position / 100) * audioDuration;
+            audioElement.currentTime = seekTime;
+            updateProgress();
+        }
+        
+        // 格式化时间（秒 -> MM:SS）
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return '00:00';
+            
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        // 分贝转线性值
+        function dbToLinear(db) {
+            return Math.pow(10, db / 20);
+        }
+        
+        // 线性值转分贝
+        function linearToDb(linear) {
+            return 20 * Math.log10(linear);
+        }
+        
+        // 应用预设
+        function applyPreset(presetName) {
+            const preset = presets[presetName];
+            if (!preset) return;
+            
+            // 应用增益
+            preset.gains.forEach((gainDb, index) => {
+                if (eqControls[index]) {
+                    eqControls[index].value = gainDb;
+                    eqValueDisplays[index].textContent = `${gainDb} dB`;
+                }
+                
+                if (eqFilters[index]) {
+                    // 注意：直接使用分贝值
+                    eqFilters[index].gain.value = gainDb;
+                }
+            });
+            
+            // 应用Q值
+            preset.qValues.forEach((qValue, index) => {
+                if (qControls[index]) {
+                    qControls[index].value = qValue;
+                    qValueDisplays[index].textContent = `Q: ${qValue.toFixed(1)}`;
+                }
+                
+                if (eqFilters[index]) {
+                    eqFilters[index].Q.value = qValue;
+                }
+            });
+            
+            // 应用频率（仅对自定义频点）
+            preset.frequencies.forEach((freq, index) => {
+                if (CUSTOM_FREQ_INDICES.includes(index)) {
+                    // 更新UI中的频率显示
+                    const freqDisplay = freqValueDisplays.find(item => item.index === index);
+                    const freqControl = freqControls.find(item => item.index === index);
+                    
+                    if (freqDisplay && freqDisplay.element) {
+                        freqDisplay.element.textContent = `${freq} Hz`;
+                    }
+                    
+                    if (freqControl && freqControl.element) {
+                        freqControl.element.value = freq;
+                    }
+                    
+                    // 更新频率标签
+                    const eqBand = eqControls[index].closest('.eq-band');
+                    if (eqBand) {
+                        const freqLabel = eqBand.querySelector('p:last-child');
+                        if (freqLabel) {
+                            freqLabel.textContent = `${freq} Hz`;
+                        }
+                    }
+                    
+                    // 更新滤波器频率
+                    if (eqFilters[index]) {
+                        eqFilters[index].frequency.value = freq;
+                        EQ_FREQUENCIES[index] = freq;
+                    }
+                }
+            });
+            
+            statusDisplay.textContent = `已应用预设: ${getPresetDisplayName(presetName)}`;
+        }
+        
+        // 获取预设的显示名称
+        function getPresetDisplayName(presetName) {
+            const names = {
+                'flat': '平直',
+                'bass': '低音增强',
+                'treble': '高音增强',
+                'vocal': '人声增强',
+                'classical': '古典音乐',
+                'rock': '摇滚',
+                'jazz': '爵士'
+            };
+            return names[presetName] || presetName;
+        }
+        
+        // 保存当前设置到预设槽位
+        function saveToSlot(slot) {
+            if (slot < 1 || slot > 2) return;
+            
+            const currentSettings = {
+                gains: eqControls.map(control => parseFloat(control.value)),
+                qValues: qControls.map(control => parseFloat(control.value)),
+                frequencies: [...EQ_FREQUENCIES]
+            };
+            
+            savedPresets[slot] = currentSettings;
+            localStorage.setItem(`eq-preset-${slot}`, JSON.stringify(currentSettings));
+            statusDisplay.textContent = `已保存当前设置到存储槽 ${slot}`;
+        }
+        
+        // 从预设槽位加载设置
+        function loadFromSlot(slot) {
+            if (slot < 1 || slot > 2) return;
+            
+            // 先尝试从内存加载，没有则从localStorage加载
+            let preset = savedPresets[slot];
+            if (!preset) {
+                const saved = localStorage.getItem(`eq-preset-${slot}`);
+                if (saved) {
+                    try {
+                        preset = JSON.parse(saved);
+                        savedPresets[slot] = preset;
+                    } catch (e) {
+                        console.error('加载保存的预设失败:', e);
+                        statusDisplay.textContent = `存储槽 ${slot} 没有保存的设置`;
+                        return;
+                    }
+                } else {
+                    statusDisplay.textContent = `存储槽 ${slot} 没有保存的设置`;
+                    return;
+                }
+            }
+            
+            // 应用加载的设置
+            // 增益
+            preset.gains.forEach((gainDb, index) => {
+                if (eqControls[index]) {
+                    eqControls[index].value = gainDb;
+                    eqValueDisplays[index].textContent = `${gainDb} dB`;
+                }
+                
+                if (eqFilters[index]) {
+                    // 注意：直接使用分贝值
+                    eqFilters[index].gain.value = gainDb;
+                }
+            });
+            
+            // Q值
+            preset.qValues.forEach((qValue, index) => {
+                if (qControls[index]) {
+                    qControls[index].value = qValue;
+                    qValueDisplays[index].textContent = `Q: ${qValue.toFixed(1)}`;
+                }
+                
+                if (eqFilters[index]) {
+                    eqFilters[index].Q.value = qValue;
+                }
+            });
+            
+            // 频率（仅对自定义频点）
+            preset.frequencies.forEach((freq, index) => {
+                if (CUSTOM_FREQ_INDICES.includes(index)) {
+                    // 更新UI中的频率显示
+                    const freqDisplay = freqValueDisplays.find(item => item.index === index);
+                    const freqControl = freqControls.find(item => item.index === index);
+                    
+                    if (freqDisplay && freqDisplay.element) {
+                        freqDisplay.element.textContent = `${freq} Hz`;
+                    }
+                    
+                    if (freqControl && freqControl.element) {
+                        freqControl.element.value = freq;
+                    }
+                    
+                    // 更新频率标签
+                    const eqBand = eqControls[index].closest('.eq-band');
+                    if (eqBand) {
+                        const freqLabel = eqBand.querySelector('p:last-child');
+                        if (freqLabel) {
+                            freqLabel.textContent = `${freq} Hz`;
+                        }
+                    }
+                    
+                    // 更新滤波器频率
+                    if (eqFilters[index]) {
+                        eqFilters[index].frequency.value = freq;
+                        EQ_FREQUENCIES[index] = freq;
+                    }
+                }
+            });
+            
+            statusDisplay.textContent = `已加载存储槽 ${slot} 的设置`;
+        }
+        
+        // 初始化进度条事件
+        function initProgressBarEvents() {
+            // 点击进度条
+            progressContainer.addEventListener('click', (e) => {
+                const rect = progressContainer.getBoundingClientRect();
+                const position = ((e.clientX - rect.left) / rect.width) * 100;
+                setPlaybackPosition(position);
+            });
+            
+            // 拖拽进度条
+            progressHandle.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                
+                const rect = progressContainer.getBoundingClientRect();
+                let position = ((e.clientX - rect.left) / rect.width) * 100;
+                
+                // 限制在0-100范围内
+                position = Math.max(0, Math.min(100, position));
+                
+                progressBar.style.width = `${position}%`;
+                progressHandle.style.left = `${position}%`;
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    const position = parseFloat(progressBar.style.width);
+                    setPlaybackPosition(position);
+                    isDragging = false;
+                }
+            });
+        }
+        
+        // 调整画布大小
+        function resizeCanvas() {
+            visualizerCanvas.width = visualizerCanvas.offsetWidth;
+            visualizerCanvas.height = visualizerCanvas.offsetHeight;
+        }
+        
+        // 动画帧ID
+        let animationFrameId = null;
+        
+        // 开始音频可视化
+        function startVisualization() {
+            if (!analyserNode) return;
+            
+            const bufferLength = analyserNode.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            function draw() {
+                if (!isPlaying && audioElement && audioElement.paused) {
+                    // 清空画布
+                    visualizerCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+                    animationFrameId = null;
+                    return;
+                }
+                
+                analyserNode.getByteFrequencyData(dataArray);
+                
+                const canvasWidth = visualizerCanvas.width;
+                const canvasHeight = visualizerCanvas.height;
+                
+                // 清空画布
+                visualizerCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+                
+                const barWidth = (canvasWidth / bufferLength) * 2.5;
+                let x = 0;
+                
+                // 绘制频谱
+                for (let i = 0; i < bufferLength; i++) {
+                    const barHeight = (dataArray[i] / 255) * canvasHeight;
+                    
+                    // 创建渐变颜色
+                    const gradient = visualizerCtx.createLinearGradient(0, canvasHeight, 0, canvasHeight - barHeight);
+                    gradient.addColorStop(0, '#3B82F6');
+                    gradient.addColorStop(1, '#8B5CF6');
+                    
+                    visualizerCtx.fillStyle = gradient;
+                    visualizerCtx.fillRect(x, canvasHeight - barHeight, barWidth, barHeight);
+                    
+                    x += barWidth + 1;
+                }
+                
+                animationFrameId = requestAnimationFrame(draw);
+            }
+            
+            animationFrameId = requestAnimationFrame(draw);
+        }
+        
+        // 事件监听器初始化
+        function initEventListeners() {
+            // 播放/暂停按钮
+            playBtn.addEventListener('click', togglePlayback);
+            
+            // 文件上传
+            audioUpload.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    loadAudioFile(e.target.files[0]);
+                }
+            });
+            
+            // 拖放文件
+            const dropArea = document.querySelector('.border-dashed');
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight() {
+                dropArea.classList.add('border-primary');
+                dropArea.classList.add('bg-blue-50');
+            }
+            
+            function unhighlight() {
+                dropArea.classList.remove('border-primary');
+                dropArea.classList.remove('bg-blue-50');
+            }
+            
+            dropArea.addEventListener('drop', handleDrop, false);
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const file = dt.files[0];
+                
+                if (file && file.type.startsWith('audio/')) {
+                    loadAudioFile(file);
+                } else {
+                    statusDisplay.textContent = '请上传音频文件';
+                }
+            }
+            
+            // 移除文件
+            removeFile.addEventListener('click', () => {
+                stopPlayback();
+                if (audioElement) {
+                    audioElement.src = '';
+                    audioElement = null;
+                }
+                audioUpload.value = '';
+                fileInfo.classList.add('hidden');
+                trackInfo.textContent = '未选择文件';
+                currentTimeDisplay.textContent = '00:00';
+                totalTimeDisplay.textContent = '00:00';
+                progressBar.style.width = '0%';
+                progressHandle.style.left = '0%';
+                playBtn.disabled = true;
+                statusDisplay.textContent = '请上传本地音乐文件开始使用';
+                
+                // 停止可视化动画
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
+                
+                // 清空频谱显示
+                visualizerCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+                
+                // 重置EQ
+                applyPreset('flat');
+            });
+            
+            // 音量控制
+            volumeControl.addEventListener('input', (e) => {
+                const volume = parseFloat(e.target.value);
+                volumeValue.textContent = `${Math.round(volume * 100)}%`;
+                if (gainNode) {
+                    gainNode.gain.value = volume;
+                }
+            });
+            
+            // 预设按钮
+            presetButtons.forEach(button => {
+                if (button.hasAttribute('data-preset')) {
+                    button.addEventListener('click', () => {
+                        const preset = button.getAttribute('data-preset');
+                        applyPreset(preset);
+                    });
+                } else if (button.hasAttribute('data-slot')) {
+                    // 存储槽位按钮 - 单击加载，双击保存
+                    let clickTimer = null;
+                    let isDoubleClick = false;
+                    
+                    button.addEventListener('click', (e) => {
+                        if (isDoubleClick) {
+                            isDoubleClick = false;
+                            return;
+                        }
+                        
+                        if (clickTimer) {
+                            clearTimeout(clickTimer);
+                        }
+                        
+                        clickTimer = setTimeout(() => {
+                            const slot = parseInt(button.getAttribute('data-slot'));
+                            loadFromSlot(slot);
+                            clickTimer = null;
+                        }, 300); // 300ms延迟，用于区分单击和双击
+                    });
+                    
+                    button.addEventListener('dblclick', (e) => {
+                        e.preventDefault();
+                        isDoubleClick = true;
+                        
+                        if (clickTimer) {
+                            clearTimeout(clickTimer);
+                            clickTimer = null;
+                        }
+                        
+                        const slot = parseInt(button.getAttribute('data-slot'));
+                        saveToSlot(slot);
+                    });
+                }
+            });
+        }
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initEqualizerUI();
+            initEventListeners();
+            initProgressBarEvents();
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // 尝试从localStorage加载保存的预设
+            for (let i = 1; i <= 2; i++) {
+                const saved = localStorage.getItem(`eq-preset-${i}`);
+                if (saved) {
+                    try {
+                        savedPresets[i] = JSON.parse(saved);
+                    } catch (e) {
+                        console.error(`加载预设 ${i} 失败:`, e);
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
