@@ -193,6 +193,13 @@
                     <div id="progress-handle" class="progress-handle"></div>
                 </div>
             </div>
+            <!-- 循环播放按钮 -->
+<div class="flex justify-center mb-6">
+    <button id="loop-btn" class="flex items-center gap-2 px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors text-sm">
+        <i class="fa fa-repeat"></i>
+        <span>循环播放</span>
+    </button>
+</div>
 
             <!-- 循环播放按钮 -->
 <div class="flex justify-center mb-6">
@@ -531,6 +538,22 @@
             });
 
             startVisualization();
+            // ===== 循环播放功能 =====
+    const loopBtn = document.getElementById('loop-btn');
+    let isLooping = false;
+
+    loopBtn.onclick = () => {
+        isLooping = !isLooping;
+        audioElement.loop = isLooping;
+
+        loopBtn.classList.toggle('bg-primary');
+        loopBtn.classList.toggle('text-white');
+        loopBtn.classList.toggle('bg-gray-200');
+
+        loopBtn.innerHTML = isLooping
+            ? '<i class="fa fa-repeat"></i><span>循环已开启</span>'
+            : '<i class="fa fa-repeat"></i><span>循环播放</span>';
+    };
         }
 
         function startPlayback() {
