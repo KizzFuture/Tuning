@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online EQ Traning Tools - 13段自定义均衡器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.tailwindcss.com" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#8B5CF6',
+                        dark: '#1E293B',
+                        light: '#F8FAFC'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .slider-vertical {
+                writing-mode: bt-lr;
+                -webkit-appearance: slider-vertical;
+            }
+            .visualizer-container {
+                height: 120px;
+                position: relative;
+                overflow: hidden;
+            }
+            .progress-container {
+                height: 6px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            .progress-container:hover {
+                height: 8px;
+            }
+            .progress-handle {
+                position: absolute;
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background-color: #3B82F6;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                box-shadow: 0 0 3px rgba(0,0,0,0.3);
+                opacity: 0;
+                transition: opacity 0.2s ease;
+            }
+            .progress-container:hover .progress-handle {
+                opacity: 1;
+            }
+            .eq-band {
+                flex: 1;
+                min-width: 60px;
+            }
+            .creator-signature {
+                font-style: italic;
+                letter-spacing: 0.5px;
+            }
+            .tooltip {
+                position: relative;
+            }
+            .tooltip .tooltip-text {
+                visibility: hidden;
+                width: 120px;
+                background-color: #333;
+                color: #fff;
+                text-align: center;
+                border-radius: 4px;
+                padding: 5px;
+                position: absolute;
+                z-index: 1;
+                bottom: 125%;
+                left: 50%;
+                transform: translateX(-50%);
+                opacity: 0;
+                transition: opacity 0.3s;
+                font-size: 12px;
+                pointer-events: none;
+            }
+            .tooltip .tooltip-text::after {
+                content: "";
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                margin-left: -5px;
+                border-width: 5px;
+                border-style: solid;
+                border-color: #333 transparent transparent transparent;
+            }
+            .tooltip:hover .tooltip-text {
+                visibility: visible;
+                opacity: 1;
+            }
+            .q-control {
+                width: 100%;
+                margin-top: 8px;
+            }
+            .freq-control {
+                width: 100%;
+                margin-top: 8px;
+            }
+            .custom-freq-indicator {
+                position: relative;
+            }
+            .custom-freq-indicator::after {
+                content: "✦";
+                color: '#8B5CF6';
+                font-size: 8px;
+                position: absolute;
+                top: -8px;
+                right: -5px;
+            }
+            .custom-group-label {
+                position: relative;
+                margin-top: 15px;
+                font-weight: bold;
+                color: '#8B5CF6';
+                font-size: 12px;
+            }
+            .filter-slider {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-dark">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <header class="text-center mb-10">
+            <h1 class="text-[clamp(2rem,5vw,3rem)] font-bold text-primary mb-2">Online EQ Traning Tools</h1>
+            <p class="text-gray-600 text-lg">13段自定义均衡器 - 最后三个为全范围可调频点</p>
+        </header>
+        
+        <main class="bg-white rounded-xl shadow-lg p-6 md:p-8">
+            <!-- 文件上传区域 -->
+            <div class="mb-8 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
+                <label for="audio-upload" class="cursor-pointer">
+                    <i class="fa fa-cloud-upload text-4xl text-gray-400 mb-3"></i>
+                    <p class="text-gray-700 mb-2">点击或拖放音乐文件到此处</p>
+                    <p class="text-sm text-gray-500">支持 MP3, WAV, OGG 等格式</p>
+                    <input type="file" id="audio-upload" accept="audio/*" class="hidden">
+                </label>
+                <div id="file-info" class="mt-4 hidden">
+                    <div class="flex items-center justify-center gap-3">
+                        <i class="fa fa-music text-primary"></i>
+                        <span id="file-name" class="font-medium truncate max-w-md"></span>
+                        <button id="remove-file" class="text-gray-400 hover:text-red-500">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 播放控制区域 -->
+            <div class="flex flex-wrap justify-between items-center mb-8 gap-4">
+                <div class="flex items-center gap-4">
+                    <button id="play-btn" class="bg-primary hover:bg-primary/90 text-white w-12 h-12 rounded-full flex items-center justify-center transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled="">
+                        <i class="fa fa-play text-xl"></i>
+                    </button>
+                    <div>
+                        <div id="track-info" class="font-medium">未选择文件</div>
+                        <div class="flex items-center text-sm text-gray-500 gap-2">
+                            <span id="current-time">00:00</span>
+                            <span>/</span>
+                            <span id="total-time">00:00</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <label for="volume" class="text-gray-700 font-medium">总音量:</label>
+                    <input type="range" id="volume" min="0" max="1" step="0.01" value="0.7" class="w-40 accent-primary">
+                    <span id="volume-value" class="text-gray-600 w-10 text-center">70%</span>
+                </div>
+            </div>
+            
+            <!-- 进度条 -->
+            <div class="mb-8 relative">
+                <div id="progress-container" class="progress-container bg-gray-200 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="bg-primary h-full w-0 transition-all"></div>
+                    <div id="progress-handle" class="progress-handle"></div>
+                </div>
+            </div>
+
+            <!-- 循环播放按钮（新增） -->
+            <div class="flex justify-center mb-6">
+                <button id="loop-btn" class="flex items-center gap-2 px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors text-sm">
+                    <i class="fa fa-repeat"></i>
+                    <span>循环播放</span>
+                </button>
+            </div>
+            
+            <!-- 13段均衡器区域 -->
+            <div class="mb-10">
+                <h2 class="text-xl font-semibold mb-6 text-center">13段均衡器 (✦ 标记为可自定义频点，20-20000Hz全范围可调)</h2>
+                <div class="flex justify-between items-end gap-1 md:gap-3 overflow-x-auto pb-4 px-1">
+                    <div id="eq-container" class="flex justify-between items-end w-full"></div>
+                </div>
+            </div>
+            
+            <!-- 高通 / 低通滤波 -->
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold mb-4 text-center">高通 / 低通滤波器</h2>
+                <div class="flex flex-wrap justify-center gap-8">
+                    <div class="w-64">
+                        <label class="block text-gray-700 font-medium mb-1">
+                            高通滤波 (HPF)
+                            <span id="hpf-value" class="text-primary ml-2">20 Hz</span>
+                        </label>
+                        <input type="range" id="hpf" class="filter-slider accent-primary" min="20" max="20000" step="10" value="20">
+                        <p class="text-xs text-gray-500 mt-1">低于此频率将被衰减</p>
+                    </div>
+                    <div class="w-64">
+                        <label class="block text-gray-700 font-medium mb-1">
+                            低通滤波 (LPF)
+                            <span id="lpf-value" class="text-primary ml-2">20000 Hz</span>
+                        </label>
+                        <input type="range" id="lpf" class="filter-slider accent-primary" min="20" max="20000" step="10" value="20000">
+                        <p class="text-xs text-gray-500 mt-1">高于此频率将被衰减</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 预设效果 -->
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold mb-4 text-center">音效预设</h2>
+                <div class="flex flex-wrap justify-center gap-3">
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="flat">平直</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="bass">低音增强</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="treble">高音增强</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="vocal">人声增强</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="classical">古典音乐</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="rock">摇滚</button>
+                    <button class="preset-btn bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded-md transition-colors" data-preset="jazz">爵士</button>
+                    <div class="tooltip">
+                        <button class="preset-btn bg-amber-100 hover:bg-amber-200 py-2 px-4 rounded-md transition-colors" data-slot="1">
+                            <i class="fa fa-save mr-1"></i>存储1
+                        </button>
+                        <span class="tooltip-text">单击加载，双击保存</span>
+                    </div>
+                    <div class="tooltip">
+                        <button class="preset-btn bg-amber-100 hover:bg-amber-200 py-2 px-4 rounded-md transition-colors" data-slot="2">
+                            <i class="fa fa-save mr-1"></i>存储2
+                        </button>
+                        <span class="tooltip-text">单击加载，双击保存</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 音频可视化区域 -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-4 text-center">音频频谱</h2>
+                <div class="visualizer-container bg-gray-100 rounded-lg border border-gray-200">
+                    <canvas id="visualizer" class="w-full h-full"></canvas>
+                </div>
+            </div>
+            
+            <div class="text-center text-gray-600 text-sm">
+                <p id="status" class="py-2">请上传本地音乐文件开始使用</p>
+            </div>
+        </main>
+        
+        <footer class="mt-10 text-center text-gray-500 text-sm">
+            <p>基于Web Audio API构建 | 13段均衡器精确调节音频频率</p>
+            <p class="mt-2 creator-signature text-primary">Created by Alex     Ver 1.3</p>
+        </footer>
+    </div>
+
+    <script>
+        const EQ_FREQUENCIES = [
+            31, 62, 125, 250, 500, 
+            1000, 2000, 4000, 8000, 16000,
+            500, 3000, 10000
+        ];
+        const CUSTOM_FREQ_INDICES = [10, 11, 12];
+        const DEFAULT_Q_VALUE = 1.2;
+
+        let audioContext = null;
+        let audioElement = null;
+        let analyserNode = null;
+        let gainNode = null;
+        let eqFilters = [];
+        let isPlaying = false;
+        let audioDuration = 0;
+        let updateProgressInterval = null;
+        let isDragging = false;
+        let savedPresets = { 1: null, 2: null };
+
+        let hpfFilter = null;
+        let lpfFilter = null;
+
+        const audioUpload = document.getElementById('audio-upload');
+        const fileInfo = document.getElementById('file-info');
+        const fileName = document.getElementById('file-name');
+        const removeFile = document.getElementById('remove-file');
+        const playBtn = document.getElementById('play-btn');
+        const trackInfo = document.getElementById('track-info');
+        const currentTimeDisplay = document.getElementById('current-time');
+        const totalTimeDisplay = document.getElementById('total-time');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+        const progressHandle = document.getElementById('progress-handle');
+        const volumeControl = document.getElementById('volume');
+        const volumeValue = document.getElementById('volume-value');
+        const eqContainer = document.getElementById('eq-container');
+        const statusDisplay = document.getElementById('status');
+        const visualizerCanvas = document.getElementById('visualizer');
+        const visualizerCtx = visualizerCanvas.getContext('2d');
+        const presetButtons = document.querySelectorAll('.preset-btn');
+
+        let eqControls = [];
+        let eqValueDisplays = [];
+        let qControls = [];
+        let qValueDisplays = [];
+        let freqControls = [];
+        let freqValueDisplays = [];
+
+        const presets = {
+            flat: { gains: Array(13).fill(0), qValues: Array(13).fill(DEFAULT_Q_VALUE), frequencies: [...EQ_FREQUENCIES] },
+            bass: { gains: [12,10,8,6,4,-2,-4,-6,-6,-4,8,-2,-4], qValues:[1.8,1.6,1.4,1.2,1,0.8,0.8,0.8,0.8,0.8,1.5,1,0.8], frequencies:[...EQ_FREQUENCIES] },
+            treble: { gains: [-4,-4,-6,-6,-4,-2,2,6,10,12,-4,8,10], qValues:[0.8,0.8,0.8,0.8,0.8,1,1.2,1.4,1.6,1.8,0.8,1.5,1.8], frequencies:[...EQ_FREQUENCIES] },
+            vocal: { gains: [-6,-6,-4,-2,0,6,4,-2,-2,-4,-2,6,-2], qValues:[1,1,1,1,1.2,2,1.5,1,1,1,1,2,1], frequencies:[...EQ_FREQUENCIES] },
+            classical: { gains: [4,4,2,0,0,0,0,2,4,4,2,0,2], qValues: Array(13).fill(1.2), frequencies:[...EQ_FREQUENCIES] },
+            rock: { gains: [8,8,6,4,-2,2,6,8,8,6,6,4,2], qValues:[1.5,1.5,1.5,1.2,1,1,1.2,1.5,1.5,1.5,1.5,1.2,1], frequencies:[...EQ_FREQUENCIES] },
+            jazz: { gains: [2,4,6,6,4,2,0,2,4,6,4,0,2], qValues: Array(13).fill(1.2), frequencies:[...EQ_FREQUENCIES] }
+        };
+
+        function initEqualizerUI() {
+            eqContainer.innerHTML = '';
+            eqControls = [];
+            eqValueDisplays = [];
+            qControls = [];
+            qValueDisplays = [];
+            freqControls = [];
+            freqValueDisplays = [];
+
+            let separatorAdded = false;
+
+            EQ_FREQUENCIES.forEach((freq, index) => {
+                const isCustomFreq = CUSTOM_FREQ_INDICES.includes(index);
+                if (isCustomFreq && !separatorAdded) {
+                    const separator = document.createElement('div');
+                    separator.className = 'flex flex-col items-center justify-end mx-2';
+                    separator.innerHTML = '<div class="custom-group-label">自定义频点</div>';
+                    eqContainer.appendChild(separator);
+                    separatorAdded = true;
+                }
+
+                const eqBand = document.createElement('div');
+                eqBand.className = 'eq-band flex flex-col items-center';
+
+                const sliderContainer = document.createElement('div');
+                sliderContainer.className = 'h-60 w-10 flex items-end justify-center mb-2';
+
+                const slider = document.createElement('input');
+                slider.type = 'range';
+                slider.min = -6;
+                slider.max = 6;
+                slider.step = 0.5;
+                slider.value = 0;
+                slider.className = 'slider-vertical h-full w-6 accent-primary';
+                slider.id = `eq-${index}`;
+                eqControls.push(slider);
+
+                const valueDisplay = document.createElement('p');
+                valueDisplay.className = 'text-primary font-medium text-sm mt-1';
+                valueDisplay.id = `eq-${index}-value`;
+                valueDisplay.textContent = '0 dB';
+                eqValueDisplays.push(valueDisplay);
+
+                let freqSlider, freqValueDisplay;
+                if (isCustomFreq) {
+                    freqSlider = document.createElement('input');
+                    freqSlider.type = 'range';
+                    freqSlider.min = 20;
+                    freqSlider.max = 20000;
+                    freqSlider.step = 10;
+                    freqSlider.value = freq;
+                    freqSlider.className = 'freq-control accent-accent';
+                    freqControls.push({index, element: freqSlider});
+
+                    freqValueDisplay = document.createElement('p');
+                    freqValueDisplay.className = 'text-accent font-medium text-xs mt-1 custom-freq-indicator';
+                    freqValueDisplay.id = `freq-${index}-value`;
+                    freqValueDisplay.textContent = `${freq} Hz`;
+                    freqValueDisplays.push({index, element: freqValueDisplay});
+                }
+
+                const qSliderContainer = document.createElement('div');
+                qSliderContainer.className = 'w-full px-1';
+
+                const qSlider = document.createElement('input');
+                qSlider.type = 'range';
+                qSlider.min = 0.1;
+                qSlider.max = 5;
+                qSlider.step = 0.1;
+                qSlider.value = DEFAULT_Q_VALUE;
+                qSlider.className = 'q-control accent-secondary';
+                qControls.push(qSlider);
+
+                const qValueDisplay = document.createElement('p');
+                qValueDisplay.className = 'text-secondary font-medium text-xs mt-1';
+                qValueDisplay.id = `q-${index}-value`;
+                qValueDisplay.textContent = `Q: ${DEFAULT_Q_VALUE.toFixed(1)}`;
+                qValueDisplays.push(qValueDisplay);
+
+                const freqLabel = document.createElement('p');
+                freqLabel.className = `font-medium text-xs mt-2 ${isCustomFreq ? 'text-accent' : 'text-gray-600'}`;
+                freqLabel.textContent = `${freq} Hz`;
+
+                sliderContainer.appendChild(slider);
+                eqBand.appendChild(sliderContainer);
+                eqBand.appendChild(valueDisplay);
+
+                if (isCustomFreq) {
+                    eqBand.appendChild(freqSlider);
+                    eqBand.appendChild(freqValueDisplay);
+                }
+
+                eqBand.appendChild(qSliderContainer);
+                qSliderContainer.appendChild(qSlider);
+                eqBand.appendChild(qValueDisplay);
+                eqBand.appendChild(freqLabel);
+                eqContainer.appendChild(eqBand);
+
+                slider.addEventListener('input', e => {
+                    const g = parseFloat(e.target.value);
+                    valueDisplay.textContent = `${g} dB`;
+                    if (eqFilters[index]) eqFilters[index].gain.value = g;
+                });
+
+                qSlider.addEventListener('input', e => {
+                    const q = parseFloat(e.target.value);
+                    qValueDisplay.textContent = `Q: ${q.toFixed(1)}`;
+                    if (eqFilters[index]) eqFilters[index].Q.value = q;
+                });
+
+                if (isCustomFreq) {
+                    freqSlider.addEventListener('input', e => {
+                        const f = parseInt(e.target.value);
+                        freqValueDisplay.textContent = `${f} Hz`;
+                        freqLabel.textContent = `${f} Hz`;
+                        if (eqFilters[index]) {
+                            eqFilters[index].frequency.value = f;
+                            EQ_FREQUENCIES[index] = f;
+                        }
+                    });
+                }
+            });
+        }
+
+        function initAudioProcessing() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyserNode = audioContext.createAnalyser();
+                analyserNode.fftSize = 2048;
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = volumeControl.value;
+
+                hpfFilter = audioContext.createBiquadFilter();
+                hpfFilter.type = 'highpass';
+                hpfFilter.frequency.value = 20;
+
+                lpfFilter = audioContext.createBiquadFilter();
+                lpfFilter.type = 'lowpass';
+                lpfFilter.frequency.value = 20000;
+
+                eqFilters = [];
+                EQ_FREQUENCIES.forEach(freq => {
+                    const f = audioContext.createBiquadFilter();
+                    f.type = 'peaking';
+                    f.frequency.value = freq;
+                    f.Q.value = DEFAULT_Q_VALUE;
+                    f.gain.value = 0;
+                    eqFilters.push(f);
+                });
+
+                for (let i = 1; i < eqFilters.length; i++) {
+                    eqFilters[i - 1].connect(eqFilters[i]);
+                }
+
+                eqFilters[eqFilters.length - 1].connect(analyserNode);
+                analyserNode.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+            } else if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        function loadAudioFile(file) {
+            if (audioElement) {
+                audioElement.pause();
+                audioElement = null;
+            }
+
+            const fileURL = URL.createObjectURL(file);
+            audioElement = new Audio(fileURL);
+            initAudioProcessing();
+
+            const source = audioContext.createMediaElementSource(audioElement);
+            source.connect(hpfFilter);
+            hpfFilter.connect(lpfFilter);
+            lpfFilter.connect(eqFilters[0]);
+
+            fileName.textContent = file.name;
+            fileInfo.classList.remove('hidden');
+            trackInfo.textContent = file.name;
+            playBtn.disabled = false;
+            statusDisplay.textContent = '音频加载完成，点击播放按钮开始';
+
+            audioElement.addEventListener('loadedmetadata', () => {
+                audioDuration = audioElement.duration;
+                totalTimeDisplay.textContent = formatTime(audioDuration);
+            });
+
+            audioElement.addEventListener('ended', () => {
+                stopPlayback();
+                statusDisplay.textContent = '播放已结束';
+            });
+
+            startVisualization();
+
+            /* ✅ 循环播放功能 */
+            const loopBtn = document.getElementById('loop-btn');
+            let isLooping = false;
+
+            loopBtn.onclick = () => {
+                isLooping = !isLooping;
+                audioElement.loop = isLooping;
+
+                loopBtn.classList.toggle('bg-primary');
+                loopBtn.classList.toggle('text-white');
+                loopBtn.classList.toggle('bg-gray-200');
+
+                loopBtn.innerHTML = isLooping
+                    ? '<i class="fa fa-repeat"></i><span>循环已开启</span>'
+                    : '<i class="fa fa-repeat"></i><span>循环播放</span>';
+            };
+        }
+
+        function startPlayback() {
+            if (!audioElement) return;
+            initAudioProcessing();
+            audioElement.play().then(() => {
+                isPlaying = true;
+                playBtn.innerHTML = '<i class="fa fa-pause text-xl"></i>';
+                statusDisplay.textContent = '正在播放...';
+                updateProgressInterval = setInterval(updateProgress, 100);
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                startVisualization();
+            }).catch(err => {
+                console.error(err);
+                statusDisplay.textContent = '播放失败，请尝试再次上传文件';
+            });
+        }
+
+        function stopPlayback() {
+            if (!audioElement) return;
+            audioElement.pause();
+            isPlaying = false;
+            playBtn.innerHTML = '<i class="fa fa-play text-xl"></i>';
+            if (updateProgressInterval) clearInterval(updateProgressInterval);
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            visualizerCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+        }
+
+        function togglePlayback() {
+            isPlaying ? stopPlayback() : startPlayback();
+        }
+
+        function updateProgress() {
+            if (!audioElement || isDragging) return;
+            const pct = (audioElement.currentTime / audioDuration) * 100;
+            progressBar.style.width = `${pct}%`;
+            progressHandle.style.left = `${pct}%`;
+            currentTimeDisplay.textContent = formatTime(audioElement.currentTime);
+        }
+
+        function setPlaybackPosition(pos) {
+            if (!audioElement) return;
+            audioElement.currentTime = (pos / 100) * audioDuration;
+            updateProgress();
+        }
+
+        function formatTime(s) {
+            if (isNaN(s)) return '00:00';
+            const m = Math.floor(s / 60);
+            const sec = Math.floor(s % 60);
+            return `${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+        }
+
+        function applyPreset(name) {
+            const p = presets[name];
+            if (!p) return;
+
+            p.gains.forEach((g, i) => {
+                if (eqControls[i]) {
+                    eqControls[i].value = g;
+                    eqValueDisplays[i].textContent = `${g} dB`;
+                }
+                if (eqFilters[i]) eqFilters[i].gain.value = g;
+            });
+
+            p.qValues.forEach((q, i) => {
+                if (qControls[i]) {
+                    qControls[i].value = q;
+                    qValueDisplays[i].textContent = `Q: ${q.toFixed(1)}`;
+                }
+                if (eqFilters[i]) eqFilters[i].Q.value = q;
+            });
+
+            p.frequencies.forEach((freq, i) => {
+                if (CUSTOM_FREQ_INDICES.includes(i)) {
+                    const fd = freqValueDisplays.find(x => x.index === i);
+                    const fc = freqControls.find(x => x.index === i);
+                    if (fd) fd.element.textContent = `${freq} Hz`;
+                    if (fc) fc.element.value = freq;
+                    const band = eqControls[i].closest('.eq-band');
+                    if (band) {
+                        band.querySelector('p:last-child').textContent = `${freq} Hz`;
+                    }
+                    if (eqFilters[i]) {
+                        eqFilters[i].frequency.value = freq;
+                        EQ_FREQUENCIES[i] = freq;
+                    }
+                }
+            });
+
+            statusDisplay.textContent = `已应用预设: ${getPresetDisplayName(name)}`;
+        }
+
+        function getPresetDisplayName(n) {
+            return { flat:'平直', bass:'低音增强', treble:'高音增强', vocal:'人声增强', classical:'古典音乐', rock:'摇滚', jazz:'爵士' }[n] || n;
+        }
+
+        function saveToSlot(slot) {
+            const s = {
+                gains: eqControls.map(c => parseFloat(c.value)),
+                qValues: qControls.map(c => parseFloat(c.value)),
+                frequencies: [...EQ_FREQUENCIES]
+            };
+            savedPresets[slot] = s;
+            localStorage.setItem(`eq-preset-${slot}`, JSON.stringify(s));
+            statusDisplay.textContent = `已保存到存储槽 ${slot}`;
+        }
+
+        function loadFromSlot(slot) {
+            let p = savedPresets[slot];
+            if (!p) {
+                const d = localStorage.getItem(`eq-preset-${slot}`);
+                if (!d) return;
+                p = JSON.parse(d);
+                savedPresets[slot] = p;
+            }
+            applyPresetFromData(p);
+            statusDisplay.textContent = `已加载存储槽 ${slot}`;
+        }
+
+        function applyPresetFromData(p) {
+            p.gains.forEach((g,i)=>{
+                eqControls[i].value=g; eqValueDisplays[i].textContent=`${g} dB`;
+                if(eqFilters[i]) eqFilters[i].gain.value=g;
+            });
+            p.qValues.forEach((q,i)=>{
+                qControls[i].value=q; qValueDisplays[i].textContent=`Q: ${q.toFixed(1)}`;
+                if(eqFilters[i]) eqFilters[i].Q.value=q;
+            });
+            p.frequencies.forEach((freq,i)=>{
+                if(CUSTOM_FREQ_INDICES.includes(i)){
+                    const fd=freqValueDisplays.find(x=>x.index===i);
+                    const fc=freqControls.find(x=>x.index===i);
+                    if(fd) fd.element.textContent=`${freq} Hz`;
+                    if(fc) fc.element.value=freq;
+                    const band=eqControls[i].closest('.eq-band');
+                    if(band) band.querySelector('p:last-child').textContent=`${freq} Hz`;
+                    if(eqFilters[i]){ eqFilters[i].frequency.value=freq; EQ_FREQUENCIES[i]=freq; }
+                }
+            });
+        }
+
+        function initProgressBarEvents() {
+            progressContainer.addEventListener('click', e => {
+                const r = progressContainer.getBoundingClientRect();
+                setPlaybackPosition(((e.clientX - r.left)/r.width)*100);
+            });
+
+            progressHandle.addEventListener('mousedown', () => isDragging=true);
+            document.addEventListener('mousemove', e => {
+                if(!isDragging) return;
+                const r = progressContainer.getBoundingClientRect();
+                let p = ((e.clientX - r.left)/r.width)*100;
+                p = Math.max(0,Math.min(100,p));
+                progressBar.style.width=`${p}%`;
+                progressHandle.style.left=`${p}%`;
+            });
+            document.addEventListener('mouseup', ()=>{
+                if(isDragging){
+                    setPlaybackPosition(parseFloat(progressBar.style.width));
+                    isDragging=false;
+                }
+            });
+        }
+
+        function resizeCanvas(){
+            visualizerCanvas.width = visualizerCanvas.offsetWidth;
+            visualizerCanvas.height = visualizerCanvas.offsetHeight;
+        }
+
+        let animationFrameId=null;
+        function startVisualization(){
+            if(!analyserNode) return;
+            const buf=new Uint8Array(analyserNode.frequencyBinCount);
+            function draw(){
+                if(!isPlaying && audioElement && audioElement.paused){
+                    visualizerCtx.clearRect(0,0,visualizerCanvas.width,visualizerCanvas.height);
+                    animationFrameId=null;
+                    return;
+                }
+                analyserNode.getByteFrequencyData(buf);
+                const cw=visualizerCanvas.width, ch=visualizerCanvas.height;
+                visualizerCtx.clearRect(0,0,cw,ch);
+                const bw=(cw/buf.length)*2.5;
+                let x=0;
+                for(let i=0;i<buf.length;i++){
+                    const bh=(buf[i]/255)*ch;
+                    const grad=visualizerCtx.createLinearGradient(0,ch,0,ch-bh);
+                    grad.addColorStop(0,'#3B82F6');
+                    grad.addColorStop(1,'#8B5CF6');
+                    visualizerCtx.fillStyle=grad;
+                    visualizerCtx.fillRect(x,ch-bh,bw,bh);
+                    x+=bw+1;
+                }
+                animationFrameId=requestAnimationFrame(draw);
+            }
+            animationFrameId=requestAnimationFrame(draw);
+        }
+
+        function initEventListeners(){
+            playBtn.addEventListener('click', togglePlayback);
+
+            audioUpload.addEventListener('change', e=>{
+                if(e.target.files[0]) loadAudioFile(e.target.files[0]);
+            });
+
+            const dropArea=document.querySelector('.border-dashed');
+            ['dragenter','dragover','dragleave','drop'].forEach(ev=>dropArea.addEventListener(ev, e=>{e.preventDefault();e.stopPropagation()}));
+            ['dragenter','dragover'].forEach(ev=>dropArea.addEventListener(ev,()=>{dropArea.classList.add('border-primary','bg-blue-50')}));
+            ['dragleave','drop'].forEach(ev=>dropArea.addEventListener(ev,()=>{dropArea.classList.remove('border-primary','bg-blue-50')}));
+            dropArea.addEventListener('drop',e=>{
+                const file=e.dataTransfer.files[0];
+                if(file&&file.type.startsWith('audio/')) loadAudioFile(file);
+                else statusDisplay.textContent='请上传音频文件';
+            });
+
+            removeFile.addEventListener('click',()=>{
+                stopPlayback();
+                if(audioElement){audioElement.src='';audioElement=null;}
+                audioUpload.value='';
+                fileInfo.classList.add('hidden');
+                trackInfo.textContent='未选择文件';
+                currentTimeDisplay.textContent='00:00';
+                totalTimeDisplay.textContent='00:00';
+                progressBar.style.width='0%';
+                progressHandle.style.left='0%';
+                playBtn.disabled=true;
+                statusDisplay.textContent='请上传本地音乐文件开始使用';
+                if(animationFrameId){cancelAnimationFrame(animationFrameId);animationFrameId=null;}
+                visualizerCtx.clearRect(0,0,visualizerCanvas.width,visualizerCanvas.height);
+                applyPreset('flat');
+            });
+
+            volumeControl.addEventListener('input',e=>{
+                const v=parseFloat(e.target.value);
+                volumeValue.textContent=`${Math.round(v*100)}%`;
+                if(gainNode) gainNode.gain.value=v;
+            });
+
+            presetButtons.forEach(btn=>{
+                if(btn.hasAttribute('data-preset')){
+                    btn.addEventListener('click',()=>applyPreset(btn.getAttribute('data-preset')));
+                }
+                if(btn.hasAttribute('data-slot')){
+                    let t=null,dc=false;
+                    btn.addEventListener('click',()=>{
+                        if(dc){dc=false;return;}
+                        if(t)clearTimeout(t);
+                        t=setTimeout(()=>loadFromSlot(parseInt(btn.getAttribute('data-slot'))),300);
+                    });
+                    btn.addEventListener('dblclick',e=>{
+                        e.preventDefault();dc=true;
+                        saveToSlot(parseInt(btn.getAttribute('data-slot')));
+                    });
+                }
+            });
+
+            const hpf=document.getElementById('hpf');
+            const lpf=document.getElementById('lpf');
+            const hpfV=document.getElementById('hpf-value');
+            const lpfV=document.getElementById('lpf-value');
+
+            hpf.addEventListener('input',()=>{
+                const v=parseInt(hpf.value);
+                hpfV.textContent=v+' Hz';
+                if(hpfFilter) hpfFilter.frequency.value=v;
+            });
+            lpf.addEventListener('input',()=>{
+                const v=parseInt(lpf.value);
+                lpfV.textContent=v+' Hz';
+                if(lpfFilter) lpfFilter.frequency.value=v;
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded',()=>{
+            initEqualizerUI();
+            initEventListeners();
+            initProgressBarEvents();
+            resizeCanvas();
+            window.addEventListener('resize',resizeCanvas);
+            for(let i=1;i<=2;i++){
+                const s=localStorage.getItem(`eq-preset-${i}`);
+                if(s) savedPresets[i]=JSON.parse(s);
+            }
+        });
+    </script>
+</body>
+</html>
